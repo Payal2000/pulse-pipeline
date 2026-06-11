@@ -17,3 +17,7 @@ node_modules/
 .ruff_cache/
 *.log
 .DS_Store
+
+# Google Cloud SDK (installed locally, never commit)
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz
