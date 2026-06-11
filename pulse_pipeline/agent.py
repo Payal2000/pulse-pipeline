@@ -46,6 +46,13 @@ analyzed for weekend sales trends"), follow these steps:
    generating a secure link.  Fall back to `create_connection` only if the
    user provides credentials directly.
 
+   **IMPORTANT for Google Sheets connectors:** The `schema`, `table`, and
+   `sheet_id` fields MUST go inside the `config` object, NOT as top-level
+   fields.  Set config.sheet_id to the spreadsheet ID from the URL (the
+   part between /d/ and /edit), config.schema to a destination schema name
+   like "google_sheets_sales", and config.table to a table name like
+   "sales_data".
+
 3. **Test the connection**
    Call `run_connection_setup_tests`.  If tests fail, read the error, attempt
    a fix (e.g. correct a config value), and re-test.  After 2 failed retries,
@@ -190,8 +197,8 @@ BigQuery dataset: {bigquery_dataset}
 # ---------------------------------------------------------------------------
 fivetran_mcp = MCPToolset(
     connection_params=StdioServerParameters(
-        command="npx",
-        args=["-y", "fivetran-mcp-server"],
+        command="uvx",
+        args=["--from", "git+https://github.com/fivetran/fivetran-mcp", "fivetran-mcp"],
         env={
             "FIVETRAN_API_KEY": settings.fivetran_api_key,
             "FIVETRAN_API_SECRET": settings.fivetran_api_secret,
