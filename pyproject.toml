@@ -1,0 +1,22 @@
+[project]
+name = "pulse-pipeline"
+version = "0.1.0"
+description = "Self-healing data ops agent — Fivetran MCP + Gemini + BigQuery"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=1.0.0",
+    "google-cloud-bigquery>=3.25.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-dotenv>=1.0.0",
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+pulse-pipeline = "pulse_pipeline.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
