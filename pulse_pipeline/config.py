@@ -13,7 +13,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     # Gemini model
-    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-3.0-flash"))
 
     # Google Cloud
     gcp_project: str = field(default_factory=lambda: os.getenv("GOOGLE_CLOUD_PROJECT", ""))
