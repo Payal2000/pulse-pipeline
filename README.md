@@ -36,10 +36,16 @@ Gemini agent (Google ADK)
 
 **Loop 2 — Heal** (event-driven)
 1. Sync breaks → Fivetran webhook fires → agent wakes
-2. Diagnoses: schema drift, config issue, credential expiry
-3. Auto-fixes what it can (reload schema, resync tables, update config)
-4. Verifies fix, re-syncs, reports to user
-5. Escalates with precise diagnosis if it can't fix
+2. Diagnoses the failure, then climbs the **remediation ladder**:
+   - **Autonomous** — transient sync failures, broken tables, unambiguous config errors: fixed and re-synced without human involvement
+   - **Judgment calls** — blocked schema changes: the agent reasons about whether the new column/table matters to *your stated goal* and enables it if so
+   - **Human-in-the-loop** — credential expiry: agent arrives with a fresh Connect Card link pre-staged, so re-auth takes seconds, not hours
+3. Verifies the *pipeline* (setup tests + re-sync) **and the data** (sanity queries in BigQuery)
+4. Reports what broke, what it did, and the verified state — live in the chat UI
+5. Escalates with a precise diagnosis if it can't fix
+
+> Observability tools tell you your pipeline broke. Fivetran tells you to go
+> fix it. PulsePipe closes the loop — it fixes it.
 
 ---
 
@@ -76,7 +82,7 @@ Open [http://localhost:8080](http://localhost:8080) and start chatting.
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_MODEL` | Gemini model ID (default: `gemini-2.5-flash`) |
+| `GEMINI_MODEL` | Gemini model ID (default: `gemini-3-flash-preview`) |
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID |
 | `FIVETRAN_API_KEY` | Fivetran API key |
 | `FIVETRAN_API_SECRET` | Fivetran API secret |
@@ -123,8 +129,16 @@ After deploying, update `WEBHOOK_URL` to your Cloud Run service URL + `/api/webh
 1. **Provision**: Ask _"I want my Google Sheets sales data analyzed for weekend trends"_
 2. Watch the agent find the connector, create a Connect Card, configure schema, and trigger sync
 3. **Analyze**: Agent queries BigQuery and presents findings
-4. **Break it**: Modify the source spreadsheet schema (rename a column)
-5. **Heal**: Webhook fires → agent diagnoses schema drift → reloads schema → re-syncs → reports
+4. **Break it (auth)**: Revoke the Google Sheets OAuth grant → next sync fails →
+   webhook fires → agent diagnoses credential expiry → arrives in chat with a
+   fresh Connect Card link pre-staged → re-auth in one click → agent re-syncs,
+   sanity-checks the data, and reports
+5. **Break it (judgment)**: With schema policy set to *block new columns*, add a
+   `discount` column to the sheet → agent wakes, reasons that the column is
+   relevant to the weekend-trends goal, enables and backfills it, and explains why
+
+> Note: don't demo schema *drift* (e.g. renaming a column) — Fivetran handles
+> that natively. PulsePipe's value is what Fivetran does **not** automate.
 
 ---
 

@@ -12,8 +12,8 @@ load_dotenv()
 
 @dataclass(frozen=True)
 class Settings:
-    # Gemini model
-    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+    # Gemini model — hackathon requires Gemini 3
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"))
 
     # Google Cloud
     gcp_project: str = field(default_factory=lambda: os.getenv("GOOGLE_CLOUD_PROJECT", ""))

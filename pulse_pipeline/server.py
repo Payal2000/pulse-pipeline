@@ -35,6 +35,18 @@ runner = Runner(
 # Mapping: user_id -> session_id (for simplicity, one session per user)
 _user_sessions: dict[str, str] = {}
 
+# SSE subscribers — browsers listening for heal-loop events
+_event_subscribers: set[asyncio.Queue] = set()
+
+
+def _broadcast(event: dict) -> None:
+    """Push an event to every connected SSE client (drop if a queue is full)."""
+    for queue in _event_subscribers:
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
+
 app = FastAPI(title="PulsePipe", version="0.1.0")
 
 # Serve static frontend
@@ -176,16 +188,45 @@ async def fivetran_webhook(request: Request):
 
 
 async def _heal_in_background(connection_id: str, message: str):
-    """Run the heal loop in the background for a webhook event."""
+    """Run the heal loop in the background and broadcast progress to the UI."""
     user_id = f"webhook_{connection_id}"
+    _broadcast({"type": "heal_start", "connection_id": connection_id})
     try:
         texts = []
         async for chunk in _run_agent(user_id, message):
+            # Surface every heal step (tool calls + agent narration) to the UI
+            _broadcast({**chunk, "heal": True, "connection_id": connection_id})
             if chunk["type"] == "text":
                 texts.append(chunk["content"])
         logger.info("Heal loop completed for %s: %s", connection_id, "".join(texts)[:500])
+        _broadcast({"type": "heal_complete", "connection_id": connection_id, "ok": True})
     except Exception:
         logger.exception("Heal loop failed for %s", connection_id)
+        _broadcast({"type": "heal_complete", "connection_id": connection_id, "ok": False})
+
+
+@app.get("/api/events")
+async def events():
+    """SSE stream — pushes heal-loop events to the browser in real time."""
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    _event_subscribers.add(queue)
+
+    async def event_stream():
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                    yield f"data: {json.dumps(event, default=str)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            _event_subscribers.discard(queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/sessions/reset")

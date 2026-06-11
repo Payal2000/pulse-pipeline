@@ -71,6 +71,56 @@ form.addEventListener("submit", async (e) => {
   setLoading(false);
 });
 
+// ── Heal-loop live events (SSE) ─────────────────────────────────
+// The heal loop runs server-side from Fivetran webhooks; this stream
+// makes it visible in the chat in real time.
+let healBubble = null;
+let healText = "";
+
+const eventSource = new EventSource("/api/events");
+eventSource.onmessage = (e) => {
+  let event;
+  try { event = JSON.parse(e.data); } catch { return; }
+
+  if (event.type === "heal_start") {
+    healBubble = null;
+    healText = "";
+    appendHealBanner(`Pipeline issue detected (${event.connection_id}) — agent is investigating…`);
+    setPipelineStatus(event.connection_id, "healing");
+  } else if (event.type === "tool_call" && event.heal) {
+    appendToolCall(event.name, event.args);
+    trackPipeline(event.name, event.args);
+  } else if (event.type === "text" && event.heal) {
+    healText += event.content;
+    if (!healBubble) {
+      healBubble = appendMessage("assistant heal", healText);
+    } else {
+      healBubble.querySelector(".message-content").innerHTML = formatMarkdown(healText);
+    }
+  } else if (event.type === "heal_complete") {
+    setPipelineStatus(event.connection_id, event.ok ? "success" : "error");
+    appendHealBanner(
+      event.ok
+        ? `Self-heal complete for ${event.connection_id} ✓`
+        : `Self-heal could not finish for ${event.connection_id} — see report above`
+    );
+  }
+};
+
+function appendHealBanner(text) {
+  const div = document.createElement("div");
+  div.className = "heal-banner";
+  div.innerHTML = `<span class="heal-icon">&#128295;</span> ${escapeHtml(text)}`;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+}
+
+function setPipelineStatus(id, status) {
+  if (!pipelines.has(id)) pipelines.set(id, { name: id, status });
+  else pipelines.get(id).status = status;
+  renderPipelines();
+}
+
 // ── Reset session ───────────────────────────────────────────────
 btnReset.addEventListener("click", async () => {
   await fetch("/api/sessions/reset", {
