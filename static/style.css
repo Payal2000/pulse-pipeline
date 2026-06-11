@@ -43,6 +43,7 @@ body {
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .logo {
@@ -51,9 +52,7 @@ body {
   gap: 10px;
 }
 
-.logo-icon {
-  font-size: 24px;
-}
+.logo-icon { font-size: 24px; }
 
 .logo h1 {
   font-size: 20px;
@@ -68,6 +67,10 @@ body {
   font-size: 12px;
   margin-top: 4px;
   margin-bottom: 32px;
+}
+
+.status-section {
+  margin-bottom: 24px;
 }
 
 .status-section h3 {
@@ -102,14 +105,44 @@ body {
   flex-shrink: 0;
 }
 
-.status-dot.syncing  { background: var(--amber);  animation: pulse 1.5s infinite; }
+.status-dot.syncing  { background: var(--amber);  animation: pulse-dot 1.5s infinite; }
 .status-dot.success  { background: var(--green); }
 .status-dot.error    { background: var(--red); }
-.status-dot.healing  { background: var(--accent);  animation: pulse 1s infinite; }
+.status-dot.healing  { background: var(--accent);  animation: pulse-dot 1s infinite; }
 
-@keyframes pulse {
+@keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.4; }
+}
+
+/* ── Incident items ──────────────────────────────────────────── */
+.incident-item {
+  font-size: 11px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  border-left: 3px solid var(--border);
+}
+
+.incident-item.resolved  { border-left-color: var(--green); }
+.incident-item.escalated { border-left-color: var(--amber); }
+.incident-item.error     { border-left-color: var(--red); }
+
+.incident-id {
+  font-family: var(--mono);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.incident-type {
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+
+.incident-outcome {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-dim);
 }
 
 .sidebar-footer {
@@ -130,6 +163,36 @@ body {
 }
 
 .btn-secondary:hover { background: var(--border); }
+
+/* ── Heal banner ─────────────────────────────────────────────── */
+.heal-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, rgba(99,102,241,0.15), rgba(129,140,248,0.08));
+  border-bottom: 1px solid var(--accent);
+  font-size: 13px;
+  color: var(--accent-2);
+  transition: opacity 0.3s, max-height 0.3s;
+  max-height: 50px;
+  overflow: hidden;
+}
+
+.heal-banner.hidden {
+  opacity: 0;
+  max-height: 0;
+  padding: 0 20px;
+  border-bottom: none;
+}
+
+.heal-pulse {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1s infinite;
+  flex-shrink: 0;
+}
 
 /* ── Chat area ───────────────────────────────────────────────── */
 .chat-area {
@@ -175,6 +238,13 @@ body {
   border: 1px solid var(--border);
 }
 
+/* Heal messages have a distinct left accent */
+.message.heal .message-content {
+  background: var(--surface);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-left: 3px solid var(--accent);
+}
+
 .message-content p { margin-bottom: 8px; }
 .message-content p:last-child { margin-bottom: 0; }
 
@@ -182,6 +252,15 @@ body {
   color: var(--text-dim);
   font-size: 13px;
   font-style: italic;
+}
+
+.message-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 
 /* ── Tool call badges ────────────────────────────────────────── */
@@ -199,6 +278,11 @@ body {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
+}
+
+.tool-call.heal-tool {
+  border-color: rgba(99,102,241,0.3);
+  background: rgba(99,102,241,0.06);
 }
 
 .tool-call .tool-icon {

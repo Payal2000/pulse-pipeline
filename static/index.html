@@ -14,12 +14,19 @@
         <span class="logo-icon">&#9889;</span>
         <h1>PulsePipe</h1>
       </div>
-      <p class="tagline">Self-healing data ops</p>
+      <p class="tagline">Plain English to data insights</p>
 
       <div class="status-section">
-        <h3>Pipeline Status</h3>
+        <h3>Pipelines</h3>
         <div id="pipeline-status" class="status-list">
           <div class="status-empty">No active pipelines</div>
+        </div>
+      </div>
+
+      <div class="status-section">
+        <h3>Incidents</h3>
+        <div id="incident-log" class="status-list">
+          <div class="status-empty">No incidents</div>
         </div>
       </div>
 
@@ -32,14 +39,21 @@
 
     <!-- Main Chat -->
     <main class="chat-area">
+      <!-- Heal banner — appears when a webhook repair is in progress -->
+      <div id="heal-banner" class="heal-banner hidden">
+        <span class="heal-pulse"></span>
+        <span id="heal-banner-text">Repairing pipeline...</span>
+      </div>
+
       <div id="messages" class="messages">
         <div class="message assistant">
           <div class="message-content">
-            <p><strong>Welcome to PulsePipe!</strong></p>
-            <p>Tell me what data you need in plain English and I'll provision the
-            connectors, monitor the pipeline, and analyze the results for you.</p>
-            <p class="hint">Try: "I want my Shopify and Google Sheets data analyzed
-            for weekend sales trends"</p>
+            <p><strong>Welcome to PulsePipe</strong></p>
+            <p>Describe the data you need in plain English. I'll build the pipeline,
+            sync the data, and deliver the analysis — no dashboards, no SQL, no config.</p>
+            <p>If something breaks, I'll fix it autonomously and tell you what happened.</p>
+            <p class="hint">Try: "I want my Shopify orders and Google Sheets
+            inventory analyzed for weekend sales trends"</p>
           </div>
         </div>
       </div>

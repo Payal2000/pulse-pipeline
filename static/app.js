@@ -1,4 +1,4 @@
-// PulsePipe — Chat UI
+// PulsePipe — Chat UI with heal-loop visibility
 
 const messagesEl = document.getElementById("messages");
 const form = document.getElementById("chat-form");
@@ -6,11 +6,66 @@ const input = document.getElementById("user-input");
 const btnSend = document.getElementById("btn-send");
 const btnReset = document.getElementById("btn-reset");
 const pipelineStatusEl = document.getElementById("pipeline-status");
+const incidentLogEl = document.getElementById("incident-log");
+const healBanner = document.getElementById("heal-banner");
+const healBannerText = document.getElementById("heal-banner-text");
 
 const USER_ID = "user_" + Math.random().toString(36).slice(2, 10);
 
-// Track active pipelines for sidebar
 const pipelines = new Map();
+const incidents = [];
+
+// ── SSE: subscribe to heal-loop events ──────────────────────────
+function connectHealStream() {
+  const source = new EventSource("/api/heal/stream");
+
+  source.onmessage = (e) => {
+    let event;
+    try { event = JSON.parse(e.data); } catch { return; }
+
+    if (event.type === "heal_start") {
+      showHealBanner(`Repairing ${event.connection_id} (${event.event_type})...`);
+      appendHealMessage(`Pipeline repair triggered for **${event.connection_id}** — event: ${event.event_type}`);
+      updatePipelineStatus(event.connection_id, "healing");
+
+    } else if (event.type === "tool_call") {
+      appendToolCall(event.name, event.args, true);
+      trackPipeline(event.name, event.args);
+
+    } else if (event.type === "text") {
+      appendHealMessage(event.content);
+
+    } else if (event.type === "heal_end") {
+      hideHealBanner();
+      appendHealMessage(`Repair complete for **${event.connection_id}**`);
+      updatePipelineStatus(event.connection_id, "success");
+      loadIncidents();
+
+    } else if (event.type === "heal_error") {
+      hideHealBanner();
+      appendHealMessage(`Repair failed for **${event.connection_id}**: ${event.error}`);
+      updatePipelineStatus(event.connection_id, "error");
+      loadIncidents();
+    }
+  };
+
+  source.onerror = () => {
+    source.close();
+    setTimeout(connectHealStream, 5000);
+  };
+}
+
+connectHealStream();
+
+// ── Heal banner ─────────────────────────────────────────────────
+function showHealBanner(text) {
+  healBannerText.textContent = text;
+  healBanner.classList.remove("hidden");
+}
+
+function hideHealBanner() {
+  healBanner.classList.add("hidden");
+}
 
 // ── Send message ────────────────────────────────────────────────
 form.addEventListener("submit", async (e) => {
@@ -49,7 +104,7 @@ form.addEventListener("submit", async (e) => {
         try { chunk = JSON.parse(line); } catch { continue; }
 
         if (chunk.type === "tool_call") {
-          appendToolCall(chunk.name, chunk.args);
+          appendToolCall(chunk.name, chunk.args, false);
           trackPipeline(chunk.name, chunk.args);
         } else if (chunk.type === "text") {
           assistantText += chunk.content;
@@ -80,10 +135,12 @@ btnReset.addEventListener("click", async () => {
   });
   messagesEl.innerHTML = "";
   pipelines.clear();
+  incidents.length = 0;
   renderPipelines();
+  renderIncidents();
   appendMessage(
     "assistant",
-    "Session reset. Tell me what data you need!"
+    "Session reset. Describe the data you need!"
   );
 });
 
@@ -97,9 +154,22 @@ function appendMessage(role, text) {
   return div;
 }
 
-function appendToolCall(name, args) {
+function appendHealMessage(text) {
   const div = document.createElement("div");
-  div.className = "tool-call";
+  div.className = "message heal";
+  div.innerHTML = `
+    <div class="message-content">
+      <div class="message-label">Auto-Repair</div>
+      ${formatMarkdown(text)}
+    </div>`;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+  return div;
+}
+
+function appendToolCall(name, args, isHeal) {
+  const div = document.createElement("div");
+  div.className = `tool-call${isHeal ? " heal-tool" : ""}`;
   const argsStr = Object.entries(args || {})
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(" ")
@@ -140,14 +210,22 @@ function trackPipeline(toolName, args) {
   } else if (toolName === "sync_connection") {
     const id = args.connector_id || "pipeline";
     if (pipelines.has(id)) pipelines.get(id).status = "syncing";
-  } else if (toolName === "query_destination") {
-    // If we're querying, a sync likely succeeded
+  } else if (toolName === "query_destination" || toolName === "verify_post_heal") {
     for (const [, p] of pipelines) {
       if (p.status === "syncing") p.status = "success";
     }
-  } else if (toolName === "reload_connection_schema_config" || toolName === "resync_tables") {
+  } else if (toolName === "resync_tables" || toolName === "modify_connection") {
     const id = args.connector_id || "pipeline";
     if (pipelines.has(id)) pipelines.get(id).status = "healing";
+  }
+  renderPipelines();
+}
+
+function updatePipelineStatus(connectionId, status) {
+  if (pipelines.has(connectionId)) {
+    pipelines.get(connectionId).status = status;
+  } else {
+    pipelines.set(connectionId, { name: connectionId, status });
   }
   renderPipelines();
 }
@@ -158,7 +236,7 @@ function renderPipelines() {
     return;
   }
   pipelineStatusEl.innerHTML = "";
-  for (const [id, p] of pipelines) {
+  for (const [, p] of pipelines) {
     const div = document.createElement("div");
     div.className = "status-item";
     div.innerHTML = `
@@ -168,6 +246,42 @@ function renderPipelines() {
     pipelineStatusEl.appendChild(div);
   }
 }
+
+// ── Incident log ────────────────────────────────────────────────
+async function loadIncidents() {
+  try {
+    const res = await fetch("/api/incidents");
+    const data = await res.json();
+    incidents.length = 0;
+    incidents.push(...data);
+    renderIncidents();
+  } catch { /* ignore */ }
+}
+
+function renderIncidents() {
+  if (incidents.length === 0) {
+    incidentLogEl.innerHTML = '<div class="status-empty">No incidents</div>';
+    return;
+  }
+  incidentLogEl.innerHTML = "";
+  // Show most recent first, max 10
+  const recent = incidents.slice(-10).reverse();
+  for (const inc of recent) {
+    const div = document.createElement("div");
+    div.className = `incident-item ${inc.outcome || ""}`;
+    div.innerHTML = `
+      <span class="incident-id">${escapeHtml(inc.id)}</span>
+      <span class="incident-type">${escapeHtml(inc.failure_type)}</span>
+      <span class="incident-outcome">${escapeHtml(inc.outcome)}
+        ${inc.time_to_recovery_seconds != null ? ` &middot; ${inc.time_to_recovery_seconds}s` : ""}
+      </span>
+    `;
+    incidentLogEl.appendChild(div);
+  }
+}
+
+// Load incidents on startup
+loadIncidents();
 
 // ── Formatting ──────────────────────────────────────────────────
 function formatMarkdown(text) {
