@@ -1,8 +1,36 @@
 # PulsePipe
 
-**Self-healing data ops agent** — tell it what data you need in plain English and it provisions, monitors, repairs, and analyzes the entire pipeline autonomously.
+**Plain English to data insights** — describe what you want to know and PulsePipe
+builds the entire pipeline, syncs the data, delivers the analysis, and autonomously
+repairs failures. No dashboards, no SQL, no config.
 
-Built with **Gemini** + **Google Cloud Agent Builder (ADK)** + **Fivetran MCP** + **BigQuery**.
+> Observability tools tell you your pipeline broke. Fivetran tells you to go fix it.
+> PulsePipe is the only thing in the loop that actually fixes it — and you provisioned
+> the whole pipeline by just asking for it.
+
+Built with **Gemini** + **Google ADK** + **Fivetran MCP** + **BigQuery**.
+
+---
+
+## The Problem (quantified)
+
+| Stat | Figure | Source |
+|------|--------|--------|
+| Pipeline failures at large enterprises | ~4.7/month, ~13 hrs to resolve each | Fivetran 2026 Benchmark |
+| Engineering capacity lost to maintenance toil | 53% | Fivetran 2026; dbt 2024 |
+| Time just to *detect* a failure | 68% take 4+ hours | Monte Carlo/Wakefield 2023 |
+| Business stakeholders find issues before data teams | 74% | Monte Carlo 2022 |
+| Pipeline failures slowing AI initiatives | 97% of data leaders | Fivetran 2026 |
+
+## What Exists vs. What We Do
+
+| | Monte Carlo | Fivetran native | **PulsePipe** |
+|---|---|---|---|
+| Detect failures | Yes | Yes | Yes |
+| Diagnose root cause | Yes (AI) | Partial | Yes (Gemini) |
+| **Fix the problem** | No (read-only by design) | No (tells human to fix) | **Yes** |
+| Provision from natural language | No | No | **Yes** |
+| Analyze the data end-to-end | No | No | **Yes** |
 
 ---
 
@@ -10,36 +38,37 @@ Built with **Gemini** + **Google Cloud Agent Builder (ADK)** + **Fivetran MCP** 
 
 ```
 User (chat UI)
-   │
+   |
 Gemini agent (Google ADK)
-   │
-   ├── Fivetran MCP server
-   │     creates connectors, runs tests, triggers syncs,
-   │     monitors state, fixes schema issues, manages webhooks
-   │
-   ├── BigQuery tools
-   │     queries synced data for analysis
-   │
-   └── Fivetran webhook → Cloud Run → wakes agent on sync failure
+   |
+   |-- Fivetran MCP server (100+ tools, ALLOW_WRITES=true)
+   |     creates connectors, tests, syncs, repairs, webhooks
+   |
+   |-- BigQuery tools
+   |     queries + verifies synced data
+   |
+   +-- Fivetran webhook --> Cloud Run --> wakes agent on failure
 ```
 
 ### Two Agent Loops
 
-**Loop 1 — Provision** (user-initiated)
-1. User describes data needs → agent finds connector types
-2. Creates connection (secure Connect Card for user auth)
-3. Tests connection, retries on failure
-4. Configures schema — syncs only needed tables
-5. Registers webhook for self-healing
-6. Triggers sync, polls until complete
-7. Queries BigQuery and delivers analysis
+**Loop 1 — Provision** (user-initiated, conversational)
+1. User describes data needs in one sentence
+2. Agent finds connector types, creates a secure Connect Card
+3. Tests the connection, configures schema (syncs only needed tables)
+4. Registers a webhook for autonomous repair
+5. Triggers sync, polls until complete
+6. Queries BigQuery, delivers the analysis
 
-**Loop 2 — Heal** (event-driven)
-1. Sync breaks → Fivetran webhook fires → agent wakes
-2. Diagnoses: schema drift, config issue, credential expiry
-3. Auto-fixes what it can (reload schema, resync tables, update config)
-4. Verifies fix, re-syncs, reports to user
-5. Escalates with precise diagnosis if it can't fix
+**Loop 2 — Repair** (event-driven, graduated remediation ladder)
+
+| Tier | What | Agent does | Human? |
+|------|------|-----------|--------|
+| **1 — Autonomous** | Sync failures, transient errors | Diagnose + re-sync | No |
+| **2 — Judgment** | Blocked schema policy, config errors | Reason about user's goal, fix + re-sync | No |
+| **3 — Escalation** | Credential expiry, unresolvable | Pre-stage the fix (Connect Card), notify user | Yes |
+
+After every repair: **verify** (sanity-query BigQuery) + **record** (incident audit log).
 
 ---
 
@@ -55,18 +84,14 @@ Gemini agent (Google ADK)
 ### Setup
 
 ```bash
-# Clone
 git clone https://github.com/YOUR_USERNAME/pulse-pipeline.git
 cd pulse-pipeline
 
-# Install
 pip install -e .
 
-# Configure
 cp .env.example .env
 # Edit .env with your credentials
 
-# Run
 python -m pulse_pipeline.server
 ```
 
@@ -88,43 +113,47 @@ Open [http://localhost:8080](http://localhost:8080) and start chatting.
 
 ## Deploy to Cloud Run
 
-### Option 1: Cloud Build
-
 ```bash
 # Store secrets
 gcloud secrets create fivetran-api-key --data-file=- <<< "$FIVETRAN_API_KEY"
 gcloud secrets create fivetran-api-secret --data-file=- <<< "$FIVETRAN_API_SECRET"
 
-# Deploy
+# Build & deploy
 gcloud builds submit --config deploy/cloudbuild.yaml
 ```
 
-### Option 2: Direct Deploy
-
-```bash
-# Build & push
-gcloud builds submit --tag gcr.io/$PROJECT_ID/pulse-pipeline
-
-# Deploy
-gcloud run deploy pulse-pipeline \
-  --image gcr.io/$PROJECT_ID/pulse-pipeline \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT_ID,BIGQUERY_DATASET=pulse_pipeline" \
-  --set-secrets "FIVETRAN_API_KEY=fivetran-api-key:latest,FIVETRAN_API_SECRET=fivetran-api-secret:latest"
-```
-
-After deploying, update `WEBHOOK_URL` to your Cloud Run service URL + `/api/webhook/fivetran`.
+After deploying, set `WEBHOOK_URL` to `https://<your-service>.run.app/api/webhook/fivetran`.
 
 ---
 
-## Demo Script
+## Demo Script (~3 minutes)
 
-1. **Provision**: Ask _"I want my Google Sheets sales data analyzed for weekend trends"_
-2. Watch the agent find the connector, create a Connect Card, configure schema, and trigger sync
-3. **Analyze**: Agent queries BigQuery and presents findings
-4. **Break it**: Modify the source spreadsheet schema (rename a column)
-5. **Heal**: Webhook fires → agent diagnoses schema drift → reloads schema → re-syncs → reports
+### Act 1 — Provision (plain English to live pipeline)
+1. Type: *"I want my Google Sheets sales data analyzed for weekend trends"*
+2. Watch: agent finds connector type, creates Connect Card, user authorizes
+3. Watch: agent configures schema (syncs only needed tables), triggers sync
+4. Watch: sync completes, agent queries BigQuery, presents analysis
+
+### Act 2 — Repair (the differentiator)
+
+**Scene A — Credential revocation** (Tier 3: escalation with fix pre-staged)
+1. Revoke the Google Sheets OAuth token in Google Account settings
+2. The next sync fails → webhook fires → agent wakes up
+3. Watch: agent diagnoses "OAuth token revoked," generates a new Connect Card link
+4. User clicks the link, re-authorizes → agent re-syncs automatically
+5. *Key stat:* time-to-resolution collapsed from ~13 hours to ~60 seconds
+
+**Scene B — Blocked schema policy** (Tier 2: goal-aware judgment)
+1. Add a new `discount` column to the source Google Sheet
+2. Fivetran's schema policy blocks the change → webhook fires
+3. Watch: agent reasons — *"A discount column appeared. Since you're analyzing
+   sales trends, this is relevant — enabling it and backfilling"*
+4. Agent modifies schema config, re-syncs, verifies in BigQuery
+5. *The wow:* this is a goal-aware judgment call that no rules engine can make
+
+### Act 3 — Audit
+- Show the incident log in the sidebar: what broke, what was tried, time-to-recovery
+- Show the post-heal verification: row counts, null rates, data freshness
 
 ---
 
